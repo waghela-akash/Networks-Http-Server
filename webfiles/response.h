@@ -32,7 +32,7 @@ int getMethod(string pch){
 		if(pch[i-1]!='/')
 			request["URI"]=pch.substr(5,i-5);
 		else if(i!=5)
-			request["URI"]=pch.substr(4,i-4)+"index.html";
+			request["URI"]=pch.substr(5,i-5)+"index.html";
 		else
 			request["URI"]="index.html";
 
@@ -167,8 +167,9 @@ void addHeader(int newfd,int status){
 				printf("%s\n",dir->d_name);
 				string s= (string)dir->d_name;
 				if(dir->d_type==DT_DIR)
-					s+="/";
-				body+=("<a href=\""+ string(buffer) + s +"\">" + s +"</a><BR>");				
+					body+=("<a href=\""+ string(buffer) + s +"\">" + s +"/</a><BR>");
+				else
+					body+=("<a href=\""+ string(buffer) + s +"\">" + s +"</a><BR>");				
 			}
 			closedir(d);
 		}
@@ -217,7 +218,7 @@ void addHeader(int newfd,int status){
 	}
 	else if(status==400){
 		printf("Bad Request\n");
-		snprintf(buffer,4096,"<HEAD><TITLE>Error:400 Bad Request</TITLE></HEAD><BODY><H1>404 Not Found</H1></BODY>");
+		snprintf(buffer,4096,"<HEAD><TITLE>Bad Request</TITLE></HEAD><BODY><H1>Error:400 Bad Request</H1></BODY>");
 		reply["HTTP/1.1"] = "400 Bad Request\r\n";
 		/*-----------------------------------------------------------------------------------------------*/ 
 		reply["Content-Type"] = "text/html\r\n";
@@ -238,7 +239,7 @@ void addHeader(int newfd,int status){
 	}
 	else if(status==501){
 		printf("Not Implemented\n");
-		snprintf(buffer,4096,"<HEAD><TITLE>Error:501 Not Implemented</TITLE></HEAD><BODY><H1>404 Not Found</H1></BODY>");
+		snprintf(buffer,4096,"<HEAD><TITLE>Not Implemented</TITLE></HEAD><BODY><H1>Error:501 Not Implemented</H1></BODY>");
 		reply["HTTP/1.1"] = "501 Not Implemented\r\n";
 		/*-----------------------------------------------------------------------------------------------*/ 
 		reply["Content-Type"] = "text/html\r\n";
