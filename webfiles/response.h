@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 using namespace std;
 
 char buffer[4096];
