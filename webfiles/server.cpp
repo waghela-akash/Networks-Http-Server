@@ -19,13 +19,17 @@ int main(int argc, char *argv[]){
 	while(1){
 		int newfd = acceptConnection(sockfd);
 		if(newfd>0 && fork()==0){
-			while(getRequest(newfd)){
-				sendResponse(newfd);
-				printf("Response Sent\n");
+			while(1){
+				int ret = getRequest(newfd);
+				if(ret==0 || sendResponse(newfd,ret)==0){
+					printf("Response Sent\n");
+					closeConnection(newfd);
+					break;
+				}				
 			}
 			exit(0);			
 		}
-		sleep(10);		
+		//sleep(10);		
 	}
 	return 0;
 }

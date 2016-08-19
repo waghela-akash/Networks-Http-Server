@@ -6,12 +6,13 @@
 #include <cstring>
 #include <stdlib.h>
 #include <stdio.h>
+#include <dirent.h>
 using namespace std;
 
 char buffer[4096];
 map<string,string> request;
 map<string,string> reply;
-int debug=1;
+int dbug=1;
 
 
 bool is_file_exist(const char *fileName){
@@ -19,57 +20,64 @@ bool is_file_exist(const char *fileName){
     return infile.good();
 }
 
-void getMethod(string pch){
+int getMethod(string pch){
 	if(pch.substr(0,3)=="GET"){
 		request["MethodName"]="GET";
 		int i=4;
 		while(pch[i]!=' ')
 			i++;
-		if(i>5)
+		request["URItype"]="file";
+		if(i>5){
+			if(pch[i-1]=='/')
+				request["URItype"]="dir";
 			request["URI"]=pch.substr(5,i-5);
+		}
 		else
 			request["URI"]="index.html";
 	}
-	if(debug){
-		//printf("%s ** %s\n",request["MethodName"],request["URI"] );
+	else
+		return 501;
+	if(dbug)
 		cout<<request["MethodName"]<<" ** "<<request["URI"]<<endl;
-	}
+	return 200;
 }
 
-void parseRequest(){
-	char *pch=buffer;
-	//pch = buffer;
-	pch = strtok(pch,"\r\n");
-	getMethod(pch);
-	pch = strtok(NULL,"\r\n");
+int parseRequest(){
+	char *pch=buffer,*savepch,*savetemp;
+	pch = buffer;
+	pch = strtok_r(pch,"\r\n",&savepch);
+	int status=getMethod(pch);
+	if(status!=200)
+		return status;
+	pch = strtok_r(NULL,"\r\n",&savepch);
 	while(pch!=NULL){
-		if(debug)
-			printf("LINE %s\n",pch);
 		char *tpch=pch,*spch;
-		tpch = strtok(tpch,": ");
+		tpch = strtok_r(tpch,": ",&savetemp);
 		spch = tpch;
-		tpch = strtok(NULL,"\r\n");
-		if(debug)
-			printf("%s == %s\n",tpch,spch);
+		tpch = strtok_r(NULL,"\r\n",&savetemp);
+		if(dbug)
+			printf("%s == %s\n",spch,tpch);
 		request[spch]=tpch;
-		pch = strtok(NULL,"\r\n");
+		pch = strtok_r(NULL,"\r\n",&savepch);
 		//pch = strtok(NULL,"\r\n");
 	}
+	return 200;
 }
+
+
 
 int getRequest(int newfd){
 		
 	memset(buffer,0,sizeof(buffer));
 	int bytes_recieved = recv(newfd,buffer,4096,0);
 	if(bytes_recieved<=0){
-		closeConnection(newfd);
+		//closeConnection(newfd);
 		return 0;
 	}
 	printf("%s\n",buffer);
-	parseRequest();
-	if(debug)
-		printf("Parsing Done\n");									
-	return 1;
+	if(dbug)
+		printf("Parsing\n");	
+	return parseRequest();
 }
 
 void sendHeader(int newfd){
@@ -84,7 +92,7 @@ void sendHeader(int newfd){
 	strcpy(msg,res.c_str());
 	cout<<msg<<endl;
 	send(newfd,msg,strlen(msg),0);
-	if(debug)
+	if(dbug)
 		printf("Header Sent\n");
 }
 
@@ -100,7 +108,8 @@ void sendBody(int newfd, FILE* fp){
 
 void addHeader(int newfd,int status){
 	reply.clear();
-	if(status==200){
+	if(status==200 && request["URItype"]=="file"){
+		printf("File Found\n");
 		FILE *fp = fopen(buffer,"r");
 		fseek(fp,0,SEEK_END);
 		int lSize = ftell(fp);
@@ -111,7 +120,7 @@ void addHeader(int newfd,int status){
 		char *pch=buffer;
 		pch=strtok(buffer,".");
 		pch=strtok(NULL,".");
-		if(debug)
+		if(dbug)
 			cout<<pch<<endl;
 		if(strcmp(pch,"html")==0 || strcmp(pch,"htm")==0)
 			reply["Content-Type"] = "text/html\r\n";
@@ -130,32 +139,122 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",lSize);
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		reply["Connection"] =  "Keep-Alive\r\n";
+		if(request["Connection"])
+			reply["Connection"] =  request["Connection"]+"\r\n";
+		else
+			reply["Connection"] = "Keep-Alive\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(debug)
+		if(dbug)
 			printf("Header Added\n");
 		sendHeader(newfd);
 		sendBody(newfd,fp);
 		fclose(fp);		
 	}
+	if(status==200 && request["URItype"]=="dir"){
+		printf("Directory Found\n");
+		DIR *d;
+		struct dirent *dir;
+		d=opendir(buffer);
+		string body="<HEAD><TITLE>Directory</TITLE></HEAD><BODY>";
+		if(d){
+			while((dir=readdir(d))!=NULL){
+				printf("%s\n",dir->d_name);
+				string s= (string)dir->d_name;
+				if(dir->d_type==DT_DIR)
+					s+="/";
+				body+=("<a href=\""+ s +"\">" + s +"</a><BR>");				
+			}
+			closedir(d);
+		}
+		body+=("</body>");
+		int lSize=body.length();		
+		reply["HTTP/1.1"] = "200 OK\r\n";
+		/*-----------------------------------------------------------------------------------------------*/ 
+		reply["Content-Type"] = "text/html\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		char num[10];
+		snprintf(num,10,"%d",lSize);
+		reply["Content-Length"] = string(num)+"\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(request["Connection"])
+			reply["Connection"] =  request["Connection"]+"\r\n";
+		else
+			reply["Connection"] = "Keep-Alive\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(dbug)
+			printf("Header Added\n");
+		sendHeader(newfd);
+		cout<<body<<endl;
+		send(newfd,body.c_str(),lSize,0);		
+	}
 	else if(status==404){
+		printf("File Not Found\n");		
+		snprintf(buffer,4096,"<HEAD><TITLE>404 File Not Found</TITLE></HEAD><BODY><H1>404 Not Found</H1></BODY>");
+
 		reply["HTTP/1.1"] = "404 Not Found\r\n";
 		/*-----------------------------------------------------------------------------------------------*/ 
 		reply["Content-Type"] = "text/html\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		reply["Content-Length"] = "0\r\n";
+		char num[10];
+		snprintf(num,10,"%d",(int)strlen(buffer));
+		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		reply["Connection"] =  "Keep-Alive\r\n";
+		if(request["Connection"])
+			reply["Connection"] =  request["Connection"]+"\r\n";
+		else
+			reply["Connection"] = "Keep-Alive\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(debug)
+		if(dbug)
 			printf("Header Added\n");
 		sendHeader(newfd);
-		//sendBody(newfd,fp);
+		send(newfd,buffer,strlen(buffer),0);
+	}
+	else if(status==400){
+		printf("Bad Request\n");
+		snprintf(buffer,4096,"<HEAD><TITLE>Error:400 Bad Request</TITLE></HEAD><BODY><H1>404 Not Found</H1></BODY>");
+		reply["HTTP/1.1"] = "400 Bad Request\r\n";
+		/*-----------------------------------------------------------------------------------------------*/ 
+		reply["Content-Type"] = "text/html\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		char num[10];
+		snprintf(num,10,"%d",(int)strlen(buffer));
+		reply["Content-Length"] = string(num)+"\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(request["Connection"])
+			reply["Connection"] =  request["Connection"]+"\r\n";
+		else
+			reply["Connection"] = "Keep-Alive\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(dbug)
+			printf("Header Added\n");
+		sendHeader(newfd);
+		send(newfd,buffer,strlen(buffer),0);
+	}
+	else if(status==501){
+		printf("Not Implemented\n");
+		snprintf(buffer,4096,"<HEAD><TITLE>Error:501 Not Implemented</TITLE></HEAD><BODY><H1>404 Not Found</H1></BODY>");
+		reply["HTTP/1.1"] = "501 Not Implemented\r\n";
+		/*-----------------------------------------------------------------------------------------------*/ 
+		reply["Content-Type"] = "text/html\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		char num[10];
+		snprintf(num,10,"%d",(int)strlen(buffer));
+		reply["Content-Length"] = string(num)+"\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(request["Connection"])
+			reply["Connection"] =  request["Connection"]+"\r\n";
+		else
+			reply["Connection"] = "Keep-Alive\r\n";
+		/*-----------------------------------------------------------------------------------------------*/
+		if(dbug)
+			printf("Header Added\n");
+		sendHeader(newfd);
+		send(newfd,buffer,strlen(buffer),0);
 	}
 }
 
-int sendResponse(int newfd){
-	if(debug)
+int sendResponse(int newfd, int stat){
+	if(dbug)
 		printf("Sending Response...\n");
 
 	memset(buffer,0,sizeof(buffer));
@@ -163,14 +262,16 @@ int sendResponse(int newfd){
 		buffer[i] = request["URI"][i];
 
 	printf("\nRequested File: (%s)\n",buffer);
-
-	if(is_file_exist(buffer)){
-		printf("File Found !\n");
+	if(stat!=200){
+		addHeader(newfd,stat);
+	}
+	else if(is_file_exist(buffer)){
 		addHeader(newfd,200);										
 	}
 	else{
-		printf("File Not Found !\n");
 		addHeader(newfd,404);
-	}	
-	return 0;
+	}
+	if(request["Connection"]=="close")
+		return 0;	
+	return 1;
 }
