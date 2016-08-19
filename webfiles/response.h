@@ -29,14 +29,16 @@ int getMethod(string pch){
 		int i=4;
 		while(pch[i]!=' ')
 			i++;
-		request["URItype"]="file";
-		if(i>5){
-			if(pch[i-1]=='/')
-				request["URItype"]="dir";
+		if(pch[i-1]!='/')
 			request["URI"]=pch.substr(5,i-5);
-		}
+		else if(i!=5)
+			request["URI"]=pch.substr(4,i-4)+"index.html";
 		else
 			request["URI"]="index.html";
+
+		struct stat sb;
+		stat(request["URI"].c_str(),&sb); 
+		request["URItype"]= (S_ISREG(sb.st_mode)) ? "file" : "dir";
 	}
 	else
 		return 501;
@@ -142,7 +144,7 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",lSize);
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(request["Connection"])
+		if(request.find("Connection")!=request.end())
 			reply["Connection"] =  request["Connection"]+"\r\n";
 		else
 			reply["Connection"] = "Keep-Alive\r\n";
@@ -155,6 +157,7 @@ void addHeader(int newfd,int status){
 	}
 	if(status==200 && request["URItype"]=="dir"){
 		printf("Directory Found\n");
+		buffer[strlen(buffer)]='/';
 		DIR *d;
 		struct dirent *dir;
 		d=opendir(buffer);
@@ -165,7 +168,7 @@ void addHeader(int newfd,int status){
 				string s= (string)dir->d_name;
 				if(dir->d_type==DT_DIR)
 					s+="/";
-				body+=("<a href=\""+ s +"\">" + s +"</a><BR>");				
+				body+=("<a href=\""+ string(buffer) + s +"\">" + s +"</a><BR>");				
 			}
 			closedir(d);
 		}
@@ -179,7 +182,7 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",lSize);
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(request["Connection"])
+		if(request.find("Connection")!=request.end())
 			reply["Connection"] =  request["Connection"]+"\r\n";
 		else
 			reply["Connection"] = "Keep-Alive\r\n";
@@ -202,7 +205,7 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",(int)strlen(buffer));
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(request["Connection"])
+		if(request.find("Connection")!=request.end())
 			reply["Connection"] =  request["Connection"]+"\r\n";
 		else
 			reply["Connection"] = "Keep-Alive\r\n";
@@ -223,7 +226,7 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",(int)strlen(buffer));
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(request["Connection"])
+		if(request.find("Connection")!=request.end())
 			reply["Connection"] =  request["Connection"]+"\r\n";
 		else
 			reply["Connection"] = "Keep-Alive\r\n";
@@ -244,7 +247,7 @@ void addHeader(int newfd,int status){
 		snprintf(num,10,"%d",(int)strlen(buffer));
 		reply["Content-Length"] = string(num)+"\r\n";
 		/*-----------------------------------------------------------------------------------------------*/
-		if(request["Connection"])
+		if(request.find("Connection")!=request.end())
 			reply["Connection"] =  request["Connection"]+"\r\n";
 		else
 			reply["Connection"] = "Keep-Alive\r\n";
