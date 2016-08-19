@@ -29,10 +29,8 @@ int getMethod(string pch){
 		int i=4;
 		while(pch[i]!=' ')
 			i++;
-		if(pch[i-1]!='/')
+		if(i>5)
 			request["URI"]=pch.substr(5,i-5);
-		else if(i!=5)
-			request["URI"]=pch.substr(5,i-5)+"index.html";
 		else
 			request["URI"]="index.html";
 
@@ -157,7 +155,6 @@ void addHeader(int newfd,int status){
 	}
 	if(status==200 && request["URItype"]=="dir"){
 		printf("Directory Found\n");
-		buffer[strlen(buffer)]='/';
 		DIR *d;
 		struct dirent *dir;
 		d=opendir(buffer);
@@ -167,9 +164,9 @@ void addHeader(int newfd,int status){
 				printf("%s\n",dir->d_name);
 				string s= (string)dir->d_name;
 				if(dir->d_type==DT_DIR)
-					body+=("<a href=\""+ string(buffer) + s +"\">" + s +"/</a><BR>");
+					body+=("<a href=\"" + s +"/\">" + s +"/</a><BR>");
 				else
-					body+=("<a href=\""+ string(buffer) + s +"\">" + s +"</a><BR>");				
+					body+=("<a href=\"" + s +"\">" + s +"</a><BR>");				
 			}
 			closedir(d);
 		}
